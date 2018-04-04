@@ -59,7 +59,7 @@ This is a token reader with character predicates."
 						      (progn (print 0) 0)			;
 						      (progn (print n) (funcall FUNCTION (- n 1))))))) 10)|#
 ;;; Yes it is a bit complex and redundant, so there is an anaphoric macro
-(defmacro ay (lambda-list-args specific-args code)
+(defmacro ay (lambda-list-args specific-args &rest code)
   "Like Y-combinator, but is a recursive macro. The anaphor is 'f'. Don't forget
 to funcall f instead of trying to use it like an interned function."
   `(funcall (y-comb #'(lambda (f) #'(lambda ,lambda-list-args
@@ -71,3 +71,8 @@ to funcall f instead of trying to use it like an interned function."
 			     b
 			     (funcall f (- a 1) (progn (print b) (+ b 1)))))|#
 ;;; It is peano arithmetic.
+(defmacro aif (conditional then &optional else)
+  `(let ((it ,conditional))
+     (if it
+	 ,then
+	 ,else)))
