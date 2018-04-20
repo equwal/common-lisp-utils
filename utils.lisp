@@ -1,4 +1,17 @@
 ;; Export read-token read-int
+(defpackage :utils
+  (:use :cl :cl-user)
+  (:export :make-read
+	   :once-only
+	   :with-gensyms
+	   :y-comb
+	   :aif))
+(in-package :utils)
+(defmacro with-gensyms (symbols &body body)
+  "Create gensyms for those symbols."
+  `(let (,@(mapcar #'(lambda (sym)
+		       `(,sym ',(gensym))) symbols))
+     ,@body))
 (defvar *buffer-char* "")
 (defun numberp-char (char)
   "Aux function."
@@ -31,11 +44,6 @@ This is a token reader with character predicates."
 	 (recur "")))))
 (make-read read-token #'(lambda (x) t) #'whitespacep-char)
 (make-read read-int #'numberp-char #'whitespacep-char)
-(defmacro abbrev (short long)
-  `(defmacro ,short (&rest args)
-     `(,',long ,@args)))
-(abbrev mvbind multiple-value-bind)
-(abbrev dbind destructuring-bind)
 (defmacro once-only ((&rest names) &body body)
   "A macro-writing utility for evaluating code only once."
   (let ((gensyms (loop for n in names collect (gensym))))
@@ -43,11 +51,6 @@ This is a token reader with character predicates."
        `(let (,,@(loop for g in gensyms for n in names collect ``(,,g ,,n)))
           ,(let (,@(loop for n in names for g in gensyms collect `(,n ,g)))
              ,@body)))))
-(defmacro with-gensyms (symbols &body body)
-  "Create gensyms for those symbols."
-  `(let (,@(mapcar #'(lambda (sym)
-		       `(,sym ',(gensym))) symbols))
-     ,@body))
 (defun y-comb (f)
   "The Y-combinator from the Lambda calculus of Alonzo Church."
   ((lambda (x) (funcall x x))
@@ -63,7 +66,7 @@ This is a token reader with character predicates."
   "Like Y-combinator, but is a recursive macro. The anaphor is 'f'. Don't forget
 to funcall f instead of trying to use it like an interned function."
   `(funcall (y-comb #'(lambda (f) #'(lambda ,lambda-list-args
-				       ,code)))
+				       ,@code)))
 	    ,@specific-args))
 ;;; Example code for the macro:
 #|(y (a b) (10 0) 
