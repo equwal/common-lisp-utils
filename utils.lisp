@@ -4,8 +4,10 @@
   (:export :make-read
 	   :once-only
 	   :with-gensyms
-	   :y-comb
-	   :aif))
+	   :y
+	   :aif
+	   :it ;; A feature of any anamorphic macro here.
+	   ))
 (in-package :utils)
 (defun y-comb (f)
   "The Y-combinator from the Lambda calculus of Alonzo Church."
@@ -91,3 +93,34 @@ This is a token reader with character predicates."
      (if it
 	 ,then
 	 ,else)))
+;; For making a matrix, reading it, and getting its dimensions
+;; Arrays don't support O(1) dimension reading support.
+(defclass matrix () ((dimensions :accessor dim
+				 :initarg :dim)
+		     (array :accessor ar
+			    :initarg :ar)))
+
+(defmacro mref (matrix dimensions)
+  `(aref (ar ,matrix) ,dimensions))
+(defun group (list size)
+  (labels ((recur (old-list new-list size-count this-node)
+	     (cond ((null old-list) (reverse new-list))
+		   ((= 1 size-count) (recur (cdr old-list)
+					    (cons (reverse (cons (car old-list)
+								 this-node))
+						  new-list)
+					    size
+					    nil))
+		   (t (recur (cdr old-list)
+			     new-list
+			     (1- size-count)
+			     (cons (car old-list) this-node))))))
+    (recur list nil size nil)))
+(defmacro abbrev (short long)
+  `(defmacro ,short (&rest args)
+     `(,',long ,@args)))
+(defmacro abbrevs (&rest names)
+  `(progn
+     ,@(mapcar #'(lambda (pair)
+		   `(abbrev ,@pair))
+	       (group names 2))))
