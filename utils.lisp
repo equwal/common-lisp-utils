@@ -6,7 +6,8 @@
 	   :with-gensyms
 	   :y
 	   :aif
-	   :it ;; A feature of any anamorphic macro here.
+	   :it ;; A feature of some anaphoric macros
+	   :f ;; A feature of the y combinator anaphoric macro.
 	   ))
 (in-package :utils)
 (defun y-comb (f)
