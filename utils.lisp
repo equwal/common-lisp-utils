@@ -41,19 +41,10 @@ b					; ; ;
      ,@body))
 (defun number-charp (char)
   "Aux function."
-  (or (char= #\0 char)
-      (char= #\1 char)
-      (char= #\2 char)
-      (char= #\3 char)
-      (char= #\4 char)
-      (char= #\5 char)
-      (char= #\6 char)
-      (char= #\7 char)
-      (char= #\8 char)
-      (char= #\9 char)))
+  (not (null (member char (list #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9) :test #'char= ))))
 (defun whitespace-charp (char)
   "Aux function."
-  (or (char= #\Newline char) (char= #\Space char) (char= #\Tab char)))
+  (not (null (member char (list #\Newline #\Space #\Tab) :test #'char=))))
 (defmacro make-read (name charp endp)
   "The ending character gets eaten, so it is put into VALUES."
   (with-gensyms (char str stream)
