@@ -18,21 +18,22 @@
 		  (apply (funcall y y) args))))))
 ;;; Example code for the y-combinator is in order:
 #|(funcall (y-comb #'(lambda (FUNCTION) (lambda (n) (if (= 0 n)
-						      (progn (print 0) 0)			;
+						      (progn (print 0) 0)			
 						      (progn (print n) (funcall FUNCTION (- n 1))))))) 10)|#
-;;; Yes it is a bit complex and redundant, so there is an anaphoric macro
+;;; Yes it is a bit complex and redundant, so there is an anaphoric macro.
 (defmacro y (lambda-list-args specific-args &rest code)
   "Like Y-combinator, but is a recursive macro. The anaphor is 'f'. Don't forget
 to funcall f instead of trying to use it like an interned function."
+  ;; Funcall is the price we pay for being a Lisp-2. No way around this without language switch.
   `(funcall (y-comb #'(lambda (f) #'(lambda ,lambda-list-args
-				       ,@code)))
+				      ,@code)))
 	    ,@specific-args))
 ;;; Example code for the anaphoric y-combinator:
 #|(y (a b) (10 0) 
-(if (= 0 a) 
-    b
-    (funcall f (- a 1) (progn (print b) (+ b 1)))))|#
-;;; If the downside is not obvious: No tail recursion optimization (I think).
+(if (= 0 a) 				; ; ;
+b					; ; ;
+(funcall f (- a 1) (progn (print b) (+ b 1)))))|#
+
 (defmacro with-gensyms (symbols &body body)
   "Create gensyms for those symbols."
   `(let (,@(mapcar #'(lambda (sym)
@@ -53,20 +54,6 @@ to funcall f instead of trying to use it like an interned function."
 (defun whitespace-charp (char)
   "Aux function."
   (or (char= #\Newline char) (char= #\Space char) (char= #\Tab char)))
-#|(defmacro make-read (name char-predicate end-predicate)
-  "Note: End predicate character gets eaten so we VALUES it.
-This is a token reader with character predicates."
-  (with-gensyms (char str stream)
-    `(defun ,name (&optional (,stream *standard-input*))
-       (labels ((recur (,str)
-		  (let ((,char (read-char ,stream)))
-		    (if ,end-predicate
-			(values ,str ,char)
-			(if ,char-predicate
-			    (recur (concatenate 'string
-						,str
-						(make-string 1 :initial-element ,char))))))))
-(recur "")))))|#
 (defmacro make-read (name charp endp)
   "The ending character gets eaten, so it is put into VALUES."
   (with-gensyms (char str stream)
@@ -94,15 +81,6 @@ This is a token reader with character predicates."
      (if it
 	 ,then
 	 ,else)))
-;; For making a matrix, reading it, and getting its dimensions
-;; Arrays don't support O(1) dimension reading support.
-(defclass matrix () ((dimensions :accessor dim
-				 :initarg :dim)
-		     (array :accessor ar
-			    :initarg :ar)))
-
-(defmacro mref (matrix dimensions)
-  `(aref (ar ,matrix) ,dimensions))
 (defun group (list size)
   (labels ((recur (old-list new-list size-count this-node)
 	     (cond ((null old-list) (reverse new-list))
