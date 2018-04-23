@@ -7,8 +7,10 @@
 	   :y
 	   :aif
 	   :it ;; A feature of some anaphoric macros
-	   :f ;; A feature of the y combinator anaphoric macro.
-	   ))
+	   :abbrev
+	   :abbrevs
+	   :enum
+	   :id))
 (in-package :utils)
 (defun y-comb (f)
   "The Y-combinator from the Lambda calculus of Alonzo Church."
@@ -22,16 +24,25 @@
 						      (progn (print n) (funcall FUNCTION (- n 1))))))) 10)|#
 ;;; Yes it is a bit complex and redundant, so there is an anaphoric macro.
 (defmacro y (lambda-list-args specific-args &rest code)
-  "Like Y-combinator, but is a recursive macro. The anaphor is 'f'. Don't forget
-to funcall f instead of trying to use it like an interned function."
-  ;; Funcall is the price we pay for being a Lisp-2. No way around this without language switch.
-  `(funcall (y-comb #'(lambda (f) #'(lambda ,lambda-list-args
-				      ,@code)))
-	    ,@specific-args))
+  "The anaphor is 'f'. Don't forget to funcall f instead of trying to use it 
+   like an interned function."
+  (with-gensyms (args f)
+    `(funcall (y-comb #'(lambda (,f) #'(lambda ,lambda-list-args
+					 (flet ((f (&rest ,args)
+						  (apply ,f ,args)))
+					  ,@code))))
+	      ,@specific-args)))
+ ;; (defmacro y (lambda-list-args specific-args &rest code)
+ ;;   "Like Y-combinator, but is a recursive macro. The anaphor is 'f'. Don't forget
+ ;; to funcall f instead of trying to use it like an interned function."
+ ;;   ;; Funcall is the price we pay for being a Lisp-2. Work around: symbol-macrolet.
+ ;;   `(funcall (y-comb #'(lambda (f) #'(lambda ,lambda-list-args
+ ;; 				      ,@code)))
+ ;; 	    ,@specific-args))
 ;;; Example code for the anaphoric y-combinator:
 #|(y (a b) (10 0) 
-(if (= 0 a) 				; ; ;
-b					; ; ;
+(if (= 0 a) 				; ; ; ;
+b					; ; ; ;
 (funcall f (- a 1) (progn (print b) (+ b 1)))))|#
 
 (defmacro with-gensyms (symbols &body body)
@@ -94,3 +105,14 @@ b					; ; ;
      ,@(mapcar #'(lambda (pair)
 		   `(abbrev ,@pair))
 	       (group names 2))))
+(defun enum (list)
+  (y (list acc count) (list nil 0)
+     (if (null list)
+	 (reverse acc)
+	 (funcall f (cdr list)
+		  (cons (cons (car list) count) acc)
+		  (1+ count)))))
+(defun id (thing)
+  thing)
+;; Reader macro:
+;; Convert something like #Fa.b.c to #'(lambda (x) (a (b (c x))))
