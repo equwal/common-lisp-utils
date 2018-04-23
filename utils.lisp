@@ -6,7 +6,8 @@
 	   :with-gensyms
 	   :y
 	   :aif
-	   :it ;; A feature of some anaphoric macros
+	   :it ;; for anaphoric macros
+	   :f ;; for y-combinator macro
 	   :abbrev
 	   :abbrevs
 	   :enum
@@ -32,19 +33,10 @@
 						  (apply ,f ,args)))
 					  ,@code))))
 	      ,@specific-args)))
- ;; (defmacro y (lambda-list-args specific-args &rest code)
- ;;   "Like Y-combinator, but is a recursive macro. The anaphor is 'f'. Don't forget
- ;; to funcall f instead of trying to use it like an interned function."
- ;;   ;; Funcall is the price we pay for being a Lisp-2. Work around: symbol-macrolet.
- ;;   `(funcall (y-comb #'(lambda (f) #'(lambda ,lambda-list-args
- ;; 				      ,@code)))
- ;; 	    ,@specific-args))
-;;; Example code for the anaphoric y-combinator:
 #|(y (a b) (10 0) 
 (if (= 0 a) 				; ; ; ;
 b					; ; ; ;
 (funcall f (- a 1) (progn (print b) (+ b 1)))))|#
-
 (defmacro with-gensyms (symbols &body body)
   "Create gensyms for those symbols."
   `(let (,@(mapcar #'(lambda (sym)
@@ -64,10 +56,10 @@ b					; ; ; ;
 	  (let ((,char (read-char ,stream)))
 	    (cond ((funcall ,endp ,char) (values ,str ,char))
 		  ((funcall ,charp ,char)
-		   (funcall f
-			    (concatenate 'string
-					 ,str
-					 (make-string 1 :initial-element ,char))))
+		   (f
+		    (concatenate 'string
+				 ,str
+				 (make-string 1 :initial-element ,char))))
 		  (t (values ,str ,char))))))))
 (make-read read-token #'(lambda (x) (declare (ignore x)) t) #'whitespace-charp)
 (make-read read-int #'number-charp #'whitespace-charp)
@@ -109,9 +101,9 @@ b					; ; ; ;
   (y (list acc count) (list nil 0)
      (if (null list)
 	 (reverse acc)
-	 (funcall f (cdr list)
-		  (cons (cons (car list) count) acc)
-		  (1+ count)))))
+	 (f (cdr list)
+	    (cons (cons (car list) count) acc)
+	    (1+ count)))))
 (defun id (thing)
   thing)
 ;; Reader macro:
