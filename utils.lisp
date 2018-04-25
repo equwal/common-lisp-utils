@@ -10,9 +10,24 @@
 	   :f ;; for y-combinator macro
 	   :abbrev
 	   :abbrevs
-	   :enum
-	   :id))
+	   :mapatoms))
 (in-package :utils)
+;; Compose would work with with a reader macro for point-free notation.
+(defun mapatoms (function tree)
+  "Perform operations on the atoms of a tree."
+  (y (tree) (tree)
+     (cond ((null tree) nil)
+ 	   ((integerp tree) (funcall function tree))
+ 	   (t (cons (f (car tree))
+ 		    (f (cdr tree)))))))
+(defun compose (&rest fns)
+  (let ((fns (butlast fns))
+	(fn1 (car (last fns))))
+    (if fns
+	(lambda (&rest args)
+	  (reduce #'funcall fns :from-end t
+		  :initial-value (apply fn1 args)))
+	#'identity)))
 (defun y-comb (f)
   "The Y-combinator from the Lambda calculus of Alonzo Church."
   ((lambda (x) (funcall x x))
@@ -97,14 +112,5 @@ b					; ; ; ;
      ,@(mapcar #'(lambda (pair)
 		   `(abbrev ,@pair))
 	       (group names 2))))
-(defun enum (list)
-  (y (list acc count) (list nil 0)
-     (if (null list)
-	 (reverse acc)
-	 (f (cdr list)
-	    (cons (cons (car list) count) acc)
-	    (1+ count)))))
-(defun id (thing)
-  thing)
 ;; Reader macro:
 ;; Convert something like #Fa.b.c to #'(lambda (x) (a (b (c x))))
