@@ -10,7 +10,8 @@
 	   :f ;; for y-combinator macro
 	   :abbrev
 	   :abbrevs
-	   :mapatoms))
+	   :mapatoms
+	   :group))
 (in-package :utils)
 ;; Compose would work with with a reader macro for point-free notation.
 (defun mapatoms (function tree)
@@ -54,6 +55,8 @@ b					; ; ; ;
 (funcall f (- a 1) (progn (print b) (+ b 1)))))|#
 (defmacro with-gensyms (symbols &body body)
   "Create gensyms for those symbols."
+  #+:sbcl `(with-unique-names ,symbols ,@body)
+  #-:sbcl
   `(let (,@(mapcar #'(lambda (sym)
 		       `(,sym ',(gensym))) symbols))
      ,@body))
