@@ -11,16 +11,42 @@
 	   :abbrev
 	   :abbrevs
 	   :mapatoms
-	   :group))
+	   :group
+	   :memoize
+	   :defmemo
+	   :prognil))
 (in-package :utils)
 ;; Compose would work with with a reader macro for point-free notation.
-(defun mapatoms (function tree)
-  "Perform operations on the atoms of a tree."
-  (y (tree) (tree)
-     (cond ((null tree) nil)
- 	   ((integerp tree) (funcall function tree))
- 	   (t (cons (f (car tree))
- 		    (f (cdr tree)))))))
+;;; Memoization:
+;;; Code from Paradigms of AI Programming
+;;; Copyright (c) 1991 Peter Norvig
+;;; modified.
+(defmacro defmemo (fn args &body body)
+  "Define a memoized function."
+  `(memoize (defun ,fn ,args . ,body)))
+
+(defun memo (fn &key (key #'first) (test #'eql) name)
+  "Return a memo-function of fn."
+  (let ((table (make-hash-table :test test)))
+    (setf (get name 'memo) table)
+    #'(lambda (&rest args)
+        (let ((k (funcall key args)))
+          (multiple-value-bind (val found-p)
+              (gethash k table)
+            (if found-p val
+                (setf (gethash k table) (apply fn args))))))))
+
+(defun memoize (fn-name &key (key #'first) (test #'eql))
+  "Replace fn-name's global definition with a memoized version."
+  (clear-memoize fn-name)
+  (setf (symbol-function fn-name)
+        (memo (symbol-function fn-name)
+              :name fn-name :key key :test test)))
+
+(defun clear-memoize (fn-name)
+  "Clear the hash table from a memo function."
+  (let ((table (get fn-name 'memo)))
+    (when table (clrhash table))))
 (defun compose (&rest fns)
   (let ((fns (butlast fns))
 	(fn1 (car (last fns))))
@@ -29,34 +55,25 @@
 	  (reduce #'funcall fns :from-end t
 		  :initial-value (apply fn1 args)))
 	#'identity)))
-(defun y-comb (f)
-  "The Y-combinator from the Lambda calculus of Alonzo Church."
-  ((lambda (x) (funcall x x))
-   (lambda (y)
-     (funcall f (lambda (&rest args)
-		  (apply (funcall y y) args))))))
-;;; Example code for the y-combinator is in order:
-#|(funcall (y-comb #'(lambda (FUNCTION) (lambda (n) (if (= 0 n)
-						      (progn (print 0) 0)			
-						      (progn (print n) (funcall FUNCTION (- n 1))))))) 10)|#
-;;; Yes it is a bit complex and redundant, so there is an anaphoric macro.
+
 (defmacro y (lambda-list-args specific-args &rest code)
-  "The anaphor is 'f'. Don't forget to funcall f instead of trying to use it 
-   like an interned function."
-  (with-gensyms (args f)
-    `(funcall (y-comb #'(lambda (,f) #'(lambda ,lambda-list-args
-					 (flet ((f (&rest ,args)
-						  (apply ,f ,args)))
-					  ,@code))))
-	      ,@specific-args)))
-#|(y (a b) (10 0) 
-(if (= 0 a) 				; ; ; ;
-b					; ; ; ;
-(funcall f (- a 1) (progn (print b) (+ b 1)))))|#
+	 `(labels ((f ,lambda-list-args
+		     . ,code))
+	    (f ,@specific-args)))
+#|Essentially:
+(y (a b) (10 0)
+     (if (= 0 a) b (f (- a 1) (progn (print b) (+ b 1 )))))
+;; Named aster the y-combinator, though really it is just a wrapper over labels.
+|#
+(defun mapatoms (function tree)
+  "Perform operations on the atoms of a tree."
+  (y (tree) (tree)
+     (cond ((null tree) nil)
+ 	   ((integerp tree) (funcall function tree))
+ 	   (t (cons (f (car tree))
+ 		    (f (cdr tree)))))))
 (defmacro with-gensyms (symbols &body body)
   "Create gensyms for those symbols."
-  #+:sbcl `(with-unique-names ,symbols ,@body)
-  #-:sbcl
   `(let (,@(mapcar #'(lambda (sym)
 		       `(,sym ',(gensym))) symbols))
      ,@body))
@@ -115,5 +132,26 @@ b					; ; ; ;
      ,@(mapcar #'(lambda (pair)
 		   `(abbrev ,@pair))
 	       (group names 2))))
+(defmacro prognil (&rest forms)
+  "Tired for writing (progn terminal-crashing-return nil)?"
+  `(progn ,@forms nil))
 ;; Reader macro:
 ;; Convert something like #Fa.b.c to #'(lambda (x) (a (b (c x))))
+
+;; Want to calculate fibbinacci really fast?
+(defun fib (n) 
+  (if (<= n 2) 1
+      (y (m p1 p2) (3 1 1)
+	 (if (= n m) (+ p1 p2)
+	     (f (1+ m) (+ p1 p2) p1)))))
+;; Want to calculate fibbinacci at the same speed as the previous one but
+;; memoize each one? Added bonus of being able to write it more idiomatically.
+;; Takes only about twice as long as the other one, which makes sense since
+;; there are now two major operations (addition and hashing) per call.
+(defmemo fibsave (n) 
+  (if (>= 0 n) 1
+      (+ (fib (- n 1)) (fib (- n 2)))))
+(prognil (time (fib     100000))); => .35 seconds
+
+(prognil (time (fibsave 100000))); => .7 seconds
+(prognil (time (tibsave 100000))); => 0 seconds
