@@ -14,6 +14,9 @@
 	   :alambda
 	   :it ;; for anaphoric macros
 	   :f ;; for y-combinator macro
+	   :this
+	   :that
+	   :self
 	   :abbrev
 	   :abbrevs
 	   :mapatoms
