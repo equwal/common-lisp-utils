@@ -1,6 +1,6 @@
 ;;;; My utilities and toys.
 (defpackage :utils
-  (:use :cl :cl-user)
+  (:use :cl :cl-user :lol)
   (:export :once-only
 	   :whitespacep
 	   :with-gensyms
@@ -15,18 +15,13 @@
 	   :aor
 	   :a+
 	   :asetf
-	   :alambda
 	   :it ;; for anaphoric macros
 	   :f ;; for y-combinator macro
-	   :this
-	   :that
-	   :self
 	   :abbrev
 	   :abbrevs
 	   :mapatoms
 	   :nthcar
 	   :y-trace
-	   :group
 	   :memoize
 	   :empty
 	   :defmemo
@@ -34,26 +29,15 @@
 	   :basic-profile
 	   :prognil
 	   :definline
-	   :fib-fast
-	   :fib-slow
-	   :fib-save
 	   :dolines
 	   :push-on
 	   :mvbind
 	   :dbind
-	   :fact
-	   :choose
-	   :g!-symbol-p
-	   :o!-symbol-p
-	   :o!-symbol-to-g!-symbol
-	   :complement
 	   :last1
 	   :single
 	   :append1
 	   :conc1
-	   :mklist
-	   :mkstr
-	   :symb
+	   :pack
 	   :longer
 	   :filter
 	   :flatten
@@ -81,7 +65,6 @@
 	   :trec
 	   :>casex
 	   :shuffle
-	   :pop-symbol
 	   :compose
 	   :comp
 	   :defmacro/g!
@@ -101,7 +84,11 @@
 	   :defanaph
 	   :make-reader))
 (in-package :utils)
-
+(defmacro with-gensyms (symbols &body body)
+  "Create gensyms for those symbols."
+  `(let (,@(mapcar #'(lambda (sym)
+		       `(,sym ',(gensym))) symbols))
+     ,@body))
 ;; Compose would work with with a reader macro for point-free notation.
 ;;; Memoization:
 ;;; Code from Paradigms of AI Programming 
@@ -115,77 +102,15 @@
   `(make-array 0 :adjustable t :fill-pointer 0 ,@array-options))
 (defun use (package)
   (progn (asdf:load-system package) (use-package package)))
-(defun empty (array)
-  (declare (type array array))
-  (zerop (length array)))
-;;;; from LoL
-(defun fact (x)
-  (if (= x 0)
-    1
-    (* x (fact (- x 1)))))
-(defun choose (n r)
-  (/ (fact n)
-     (fact (- n r))
-     (fact r)))
-(defun g!-symbol-p (s)
-  (and (symbolp s)
-       (> (length (symbol-name s)) 2)
-       (string= (symbol-name s)
-                "G!"
-                :start1 0
-                :end1 2)))
-(defun o!-symbol-p (s)
-  (and (symbolp s)
-       (> (length (symbol-name s)) 2)
-       (string= (symbol-name s)
-                "O!"
-                :start1 0
-                :end1 2)))
-
-(defun o!-symbol-to-g!-symbol (s)
-  (symb "G!"
-        (subseq (symbol-name s) 2)))
-(defmacro defmacro! (name args &rest body)
-  (let* ((os (remove-if-not #'o!-symbol-p args))
-         (gs (mapcar #'o!-symbol-to-g!-symbol os)))
-    `(defmacro/g! ,name ,args
-       `(let ,(mapcar #'list (list ,@gs) (list ,@os))
-          ,(progn ,@body)))))
-(defmacro nlet (n letargs &rest body)
-  `(labels ((,n ,(mapcar #'car letargs)
-              ,@body))
-     (,n ,@(mapcar #'cadr letargs))))
-(defmacro defmacro/g! (name args &rest body)
-  (let ((syms (remove-duplicates
-                (remove-if-not #'g!-symbol-p
-                               (flatten body)))))
-    `(defmacro ,name ,args
-       (let ,(mapcar
-               (lambda (s)
-                 `(,s (gensym ,(subseq
-                                 (symbol-name s)
-                                 2))))
-               syms)
-         ,@body))))
-;; (defmacro! dlambda (&rest ds)
-;;   `(lambda (&rest ,g!args)
-;;      (case (car ,g!args)
-;;        ,@(mapcar
-;;            (lambda (d)
-;;              `(,(if (eq t (car d))
-;;                   t
-;;                   (list (car d)))
-;;                (apply (lambda ,@(cdr d))
-;;                       ,(if (eq t (car d))
-;;                          g!args
-;;                          `(cdr ,g!args)))))
-;; 	   ds))))
 ;; From OnLisp
  (defun comp (pred)
    (compose #'not pred))
-(proclaim '(inline last1 single append1 conc1 mklist))
+(proclaim '(inline last1 single append1 conc1 empty))
 (proclaim '(optimize speed))
 
+(defun empty (array)
+  (declare (type array array))
+  (zerop (length array)))
 (defun last1 (lst)
   (car (last lst)))
 (defun single (lst)
@@ -194,7 +119,7 @@
   (append lst (list obj)))
 (defun conc1 (lst obj)   
   (nconc lst (list obj)))
-(defun mklist (obj)
+(defun pack (obj)
   (if (listp obj) obj (list obj)))
 
 (defun mkstr (&rest args)
@@ -424,15 +349,10 @@
 (defmacro nilf (&rest args) `(allf nil ,@args))
 (defmacro tf (&rest args) `(allf t ,@args))
 (define-modify-macro toggle () not)
-(defmacro alambda (parms &body body)
-  `(labels ((self ,parms ,@body))
-     #'self))
 (defmacro defanaphs (&rest pairs)
-  ``(,,@(mapcar #'(lambda (p) (cons 'defanaph p)) pairs)))
-(defun pop-symbol (sym)
-  (intern (subseq (symbol-name sym) 1)))
+  ``(,,@(mapcar #'(lambda (p) `(defanaph ,@(if (consp p) p (list p)))) pairs)))
 (defmacro defanaph (name &optional &key calls (rule :all))
-  (let* ((opname (or calls (pop-symbol name)))
+  (let* ((opname (or calls (intern (subseq (symbol-name name) 1))))
 	 (body (case rule
 		 (:all `(anaphex1 args '(,opname)))
 		 (:first `(anaphex2 ',opname args))
@@ -451,7 +371,7 @@
   `(let ((it ,(car args))) (,op it ,@(cdr args))))
 (defun anaphex3 (op args)
   `(_f (lambda (it) (,op it ,@(cdr args))) ,(car args)))
-(defanaphs (a+) (alist) (aand) (aor)
+(defanaphs a+ alist aand aor
 	   (aif :calls if :rule :first)
 	   (awhen :rule :first)
 	   (asetf :rule :place))
@@ -553,11 +473,6 @@
  	   ((integerp tree) (funcall function tree))
  	   (t (cons (f (car tree))
  		    (f (cdr tree)))))))
-(defmacro with-gensyms (symbols &body body)
-  "Create gensyms for those symbols."
-  `(let (,@(mapcar #'(lambda (sym)
-		       `(,sym ',(gensym))) symbols))
-     ,@body))
 (defun whitespacep (char)
   "Aux function."
   (not (null (member char (list #\Newline #\Space #\Tab) :test #'char=))))
@@ -592,16 +507,8 @@
 	      (y ,lambda-list-args ,specific-args
 		 (format *trace-output*  "~v~(f ~{ ~S~})~%" (incf ,count) (list ,@lambda-list-args))
 		 (format *trace-output*  "~v~=> ~S~%" ,count  (progn ,@code)))))))
-(defun group (n list)
-  (y (acc list1) (nil list)
-     (let* ((nthcar (nthcar n list1))
-	    (length (length nthcar)))
-       (if (= 0 length) acc
-	   (if (> n length)
-	       (error "List ~S of length ~D not divisible by ~D!" list (length list) n)
-	       (f (nconc acc (list nthcar)) (nthcdr n list1)))))))
 (defmacro abbrevs (&rest items)
-  `(progn ,@(mapcar #'(lambda (p) (cons 'abbrev p)) (group 2 items))))
+  `(progn ,@(mapcar #'(lambda (p) (cons 'abbrev p)) (group items 2))))
 (defmacro abbrev (long short)
   `(defmacro ,short (&rest args)
      `(,',long ,@args)))
