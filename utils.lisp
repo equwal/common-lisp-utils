@@ -2,9 +2,13 @@
 (defpackage :utils
   (:use :cl :cl-user)
   (:export :once-only
+	   :whitespacep
 	   :with-gensyms
 	   :y
+	   :pop-off
+	   :make-stack
 	   :aif
+	   :use
 	   :awhen
 	   :alist
 	   :aand
@@ -24,6 +28,7 @@
 	   :y-trace
 	   :group
 	   :memoize
+	   :empty
 	   :defmemo
 	   :clear-memoize
 	   :basic-profile
@@ -106,7 +111,13 @@
 ;;; Make CPS functions automagically
 ;;; Ex: (cps apply& apply (fn list)); => apply&
 ;;; Some might call this compile-time  intern uncool. Those people are lame.
-
+(defmacro make-stack (&rest array-options)
+  `(make-array 0 :adjustable t :fill-pointer 0 ,@array-options))
+(defun use (package)
+  (progn (asdf:load-system package) (use-package package)))
+(defun empty (array)
+  (declare (type array array))
+  (zerop (length array)))
 ;;;; from LoL
 (defun fact (x)
   (if (= x 0)
@@ -484,15 +495,14 @@
 	(declare (ignore ,sub-char ,numarg))
 	,@body)
 	    (set-dispatch-macro-character ,dispatch-1 ,dispatch-2 #',name))))
-(defun make-my-string-reader ()
-  "Don't clobber the readtable unless you need something."
-  (make-reader my-string (stream #\# #\>)
-    (do* ((prev #1=(read-char stream nil nil) curr)
-	  (first prev)
-	  (curr #1# #1#)
-	  (str (make-array 0 :adjustable t :element-type 'character)
-	       (vector-push-extend prev str)))
-	 ((char= curr first) str))))
+(make-reader my-string (stream #\# #\>)
+  "Select a delimiter perl-style. #><TEST< -> 'TEST'"
+  (do* ((prev #1=(read-char stream nil nil) curr)
+	(first prev)
+	(curr #1# #1#)
+	(str (make-stack :element-type 'character)
+	     (push-on prev str)))
+       ((char= curr first) str)))
 (defmacro defmemo (fn args &body body)
   "Define a memoized function."
   `(memoize (defun ,fn ,args . ,body)))
@@ -548,10 +558,7 @@
   `(let (,@(mapcar #'(lambda (sym)
 		       `(,sym ',(gensym))) symbols))
      ,@body))
-(defun number-charp (char)
-  "Aux function."
-  (not (null (member char (list #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9) :test #'char= ))))
-(defun whitespace-charp (char)
+(defun whitespacep (char)
   "Aux function."
   (not (null (member char (list #\Newline #\Space #\Tab) :test #'char=))))
 (defmacro dolines ((var stream) &body body)
@@ -600,13 +607,15 @@
      `(,',long ,@args)))
 (abbrevs multiple-value-bind mvbind
 	 destructuring-bind dbind
-	 vector-push-extend push-on
+	 vector-pop pop-off
 	 set-dispatch-macro-character set-dispatch
 	 get-dispatch-macro-character get-dispatch
 	 get-macro-character get-char
 	 set-macro-character set-char
 	 symbol-macrolet sym-macrolet
 	 define-setf-expander defexpand)
+(defun push-on (elt stack)
+  (vector-push-extend elt stack) stack)
 (defun |#`-reader| (stream sub-char numarg)
   (declare (ignore sub-char))
   (unless numarg (setq numarg 1))
