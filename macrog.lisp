@@ -32,15 +32,15 @@
        (concatenate 'string (subseq acc 0 (1- (length acc))))))
 (defun gbang (stream no nope)
   (declare (ignore no nope))
-  (let* ((str (let ((seq (read-to-string stream)))
-		(prepare (subseq seq (+ 2 (search "!" seq))))))
-	 (code (princ (read-from-string str nil)))
+  (let* ((str1 (read-to-string stream))
+	 (term (aref str1 0))
+	 (str (prepare str1))
+	 (code (read-from-string str nil))
 	 (syms (remove-duplicates (mapcar #'(lambda (x) (intern (remove #\, (symbol-name x))))
 					  (remove-if-not #'g!-symbol-p (read-atoms str)))
 				  :test #'(lambda (x y)
 					    (string-equal (symbol-name x)
 							  (symbol-name y))))))
-    (princ syms)
     ;; a good thing.
     `(defmacro ,(car code) ,(cadr code)
        (let (,@(loop for x in syms
@@ -54,7 +54,7 @@
 ;; Dirty test case
 ;; #defmacro/g! name (z) `(let ((,g!y ,z)) (list ,g!y ,g!y)))
 ;; Clean test case
-;(defmacro/g! name (z) `(let ((,g!y ,z)) (list ,g!y ,g!y)))
+;#d{name (z) `(let ((,g!y ,z)) (list ,g!y ,g!y))}
 (set-dispatch-macro-character #\# #\d #'gbang)
 ;(set-macro-character #\d #'g! t)
 ;; (defmacro defmacro/g! (name args &rest body)
