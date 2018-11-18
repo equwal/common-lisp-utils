@@ -2,7 +2,7 @@
 (defpackage :utils
   (:use :cl :cl-user :lol)
   (:export :once-only
-	   :whitespacep
+	   :terminatingp
 	   :with-gensyms
 	   :y
 	   :pop-off
@@ -10,6 +10,7 @@
 	   :aif
 	   :use
 	   :awhen
+	   :awhile
 	   :alist
 	   :aand
 	   :aor
@@ -17,6 +18,7 @@
 	   :asetf
 	   :it ;; for anaphoric macros
 	   :f ;; for y-combinator macro
+	   :_f
 	   :abbrev
 	   :abbrevs
 	   :mapatoms
@@ -65,10 +67,8 @@
 	   :trec
 	   :>casex
 	   :shuffle
+	   :interpol
 	   :compose
-	   :comp
-	   :defmacro/g!
-	   :defmacro!
 	   :nlet
 	   :dlambda
 	   :in
@@ -76,7 +76,7 @@
 	   :in-if
 	   :>case
 	   :while
-	   :till
+	   :until
 	   :allf
 	   :nilf
 	   :tf
@@ -99,15 +99,14 @@
 ;;; Ex: (cps apply& apply (fn list)); => apply&
 ;;; Some might call this compile-time  intern uncool. Those people are lame.
 (defmacro make-stack (&rest array-options)
+  "A very common use of arrays. push-on and pop-off"
   `(make-array 0 :adjustable t :fill-pointer 0 ,@array-options))
 (defun use (package)
-  (progn (asdf:load-system package) (use-package package)))
+  "Save a little typing on startup."
+  (asdf:load-system package) (use-package package))
 ;; From OnLisp
- (defun comp (pred)
-   (compose #'not pred))
 (proclaim '(inline last1 single append1 conc1 empty))
 (proclaim '(optimize speed))
-
 (defun empty (array)
   (declare (type array array))
   (zerop (length array)))
@@ -119,9 +118,9 @@
   (append lst (list obj)))
 (defun conc1 (lst obj)   
   (nconc lst (list obj)))
-(defun pack (obj)
-  (if (listp obj) obj (list obj)))
 
+(defun pack (obj)
+  (if (consp obj) obj (list obj)))
 (defun mkstr (&rest args)
   (with-output-to-string (s)
     (dolist (a args) (princ a s))))
@@ -129,6 +128,7 @@
   (values (intern (apply #'mkstr args))))
 
 (defun longer (x y)
+  "X>Y==>T Y>X==>NIL."
   (labels ((compare (x y)
              (and (consp x) 
                   (or (null y)
@@ -137,6 +137,7 @@
         (compare x y)
         (> (length x) (length y)))))
 (defun filter (fn lst)
+  "Return a list of true return values for fn over flat lst."
   (let ((acc nil))
     (dolist (x lst)
       (let ((val (funcall fn x)))
@@ -149,6 +150,7 @@
                    (t (rec (car x) (rec (cdr x) acc))))))
     (rec x nil)))
 (defun select (fn lst)
+  "Return the first element that matches the function."
   (if (null lst)
       nil
       (let ((val (funcall fn (car lst))))
@@ -156,26 +158,29 @@
             (values (car lst) val)
             (select fn (cdr lst))))))
 (defun before (x y lst &key (test #'eql))
+  "Return the sublist where x is before y: (x y ...)"
   (and lst
        (let ((first (car lst)))
          (cond ((funcall test y first) nil)
                ((funcall test x first) lst)
                (t (before x y (cdr lst) :test test))))))
-
 (defun after (x y lst &key (test #'eql))
+  "Return the sublist where x is after y: (y x...)"
   (let ((rest (before y x lst :test test)))
-    (and rest (member x rest :test test))))
-
+    (aand rest (member x rest :test test) (cons y it))))
 (defun duplicate (obj lst &key (test #'eql))
+  "See if an object is duplicated in a flat list."
   (member obj (cdr (member obj lst :test test)) 
           :test test))
 (defun split-if (fn lst)
+  "Split the list with the first element of the second list being the match."
   (let ((acc nil))
     (do ((src lst (cdr src)))
         ((or (null src) (funcall fn (car src)))
          (values (nreverse acc) src))
       (push (car src) acc))))
 (defun most (fn lst)
+  "Return the original value of the first max (backward high water mark)."
   (if (null lst)
       (values nil nil)
       (let* ((wins (car lst))
@@ -195,6 +200,7 @@
               (setq wins obj)))
         wins)))
 (defun mostn (fn lst)
+  "Returns a list of all the original values of the maxes."
   (if (null lst)
       (values nil nil)
       (let ((result (list (car lst)))
@@ -207,30 +213,31 @@
                   ((= score max)
                    (push obj result)))))
         (values (nreverse result) max))))
+
 (defun map0-n (fn n)
   (mapa-b fn 0 n))
-
 (defun map1-n (fn n)
+  "Scanning only 1-n."
   (mapa-b fn 1 n))
-
 (defun mapa-b (fn a b &optional (step 1))
-  (do ((i a (+ i step))
-       (result nil))
-      ((> i b) (nreverse result))
-    (push (funcall fn i) result)))
-
+  "Scanning and mapping inclusive."
+  (map-> fn a #'(lambda (i) (> i b)) #'(lambda (i) (+ step i))))
 (defun map-> (fn start test-fn succ-fn)
+  "General mapping functions."
   (do ((i start (funcall succ-fn i))
        (result nil))
       ((funcall test-fn i) (nreverse result))
     (push (funcall fn i) result)))
 
 (defun mapflat (fn &rest lists)
+  "Consing mapcon. Sublists are appended instead of listed as maplist would do."
   (apply #'append (apply #'maplist fn lists)))
 (defun mappend (fn &rest lsts)
+  "Consing mapcan. Results of fn are appended instead of listed as mapcar would do."
   (apply #'append (apply #'mapcar fn lsts)))
 
 (defun mapcars (fn &rest lsts)
+  "Like appending the lsts arguments before mapcar with a uniaritous fn."
   (let ((result nil))
     (dolist (lst lsts)
       (dolist (obj lst)
@@ -238,6 +245,7 @@
     (nreverse result)))
 
 (defun rmapcar (fn &rest args)
+  "Map the leaves recursively."
   (if (some #'atom args)
       (apply fn args)
       (apply #'mapcar 
@@ -245,6 +253,7 @@
                  (apply #'rmapcar fn args))
              args)))
 (defun fand (fn &rest fns)
+  "Compose functions with and."
   (if (null fns)
       fn
       (let ((chain (apply #'for fns)))
@@ -252,6 +261,7 @@
             (and (funcall fn x) (funcall chain x))))))
 
 (defun for (fn &rest fns)
+  "Compose functions with or."
   (if (null fns)
       fn
       (let ((chain (apply #'for fns)))
@@ -268,11 +278,13 @@
                                   (self (cdr lst)))))))
     #'self))
 (defun rfind-if (fn tree)
+  "Atomic finding."
   (if (atom tree)
       (and (funcall fn tree) tree)
       (or (rfind-if fn (car tree))
           (if (cdr tree) (rfind-if fn (cdr tree))))))
 (defun ttrav (rec &optional (base #'identity))
+  "Traverse a whole tree."
   (labels ((self (tree)
              (if (atom tree)
                  (if (functionp base)
@@ -283,6 +295,7 @@
                                   (self (cdr tree)))))))
     #'self))
 (defun trec (rec &optional (base #'identity))
+  "For TTRAV with short circuiting."
   (labels 
     ((self (tree)
        (if (atom tree)
@@ -297,17 +310,20 @@
                                 (self (cdr tree))))))))
     #'self))
 (defmacro in (obj &rest choices)
+  "Macro tool for comparing code symbols."
   (let ((insym (gensym)))
     `(let ((,insym ,obj))
        (or ,@(mapcar #'(lambda (c) `(eql ,insym ,c))
                      choices)))))
 
 (defmacro inq (obj &rest args)
+  "in with automatic quoting the args."
   `(in ,obj ,@(mapcar #'(lambda (a)
                           `',a)
                       args)))
 
 (defmacro in-if (fn &rest choices)
+  "Compile time comparisons like SOME. (in-if #'evenp 1 1)==> nil."
   (let ((fnsym (gensym)))
     `(let ((,fnsym ,fn))
        (or ,@(mapcar #'(lambda (c)
@@ -315,6 +331,7 @@
                      choices)))))
 
 (defmacro >case (expr &rest clauses)
+  "Case statement that evaluates the expr (as indicated by the > name)."
   (let ((g (gensym)))
     `(let ((,g ,expr))
        (cond ,@(mapcar #'(lambda (cl) (>casex g cl))
@@ -330,26 +347,34 @@
        ((not ,test))
      ,@body))
 
-(defmacro till (test &body body)
+(defmacro until (test &body body)
   `(do ()
        (,test)
      ,@body))
+
 (defun shuffle (x y)
+  "Interpolate lists x and y with the first item being from x."
   (cond ((null x) y)
         ((null y) x)
         (t (list* (car x) (car y)
                   (shuffle (cdr x) (cdr y))))))
+(defun interpol (obj lst)
+  "Intersperse an object in a list."
+  (shuffle lst (loop for #1=#.(gensym) in (cdr lst)
+		  collect obj)))
 
 ;; p. 162
 (defmacro allf (val &rest args)
+  "Set each arg to the value."
   (with-gensyms (gval)
 		`(let ((,gval ,val))
 		   (setf ,@(mapcan #'(lambda (a) (list a gval))
 				    args)))))
-(defmacro nilf (&rest args) `(allf nil ,@args))
-(defmacro tf (&rest args) `(allf t ,@args))
-(define-modify-macro toggle () not)
+(defmacro nilf (&rest args) "Set everythhing nil."`(allf nil ,@args))
+(defmacro tf (&rest args) "Set everything true."`(allf t ,@args))
+(define-modify-macro toggle () not "Flipping vars.")
 (defmacro defanaphs (&rest pairs)
+  "Generate anaphoric macros. SBCL complains about :all because of an extra IT."
   ``(,,@(mapcar #'(lambda (p) `(defanaph ,@(if (consp p) p (list p)))) pairs)))
 (defmacro defanaph (name &optional &key calls (rule :all))
   (let* ((opname (or calls (intern (subseq (symbol-name name) 1))))
@@ -373,15 +398,18 @@
   `(_f (lambda (it) (,op it ,@(cdr args))) ,(car args)))
 (defanaphs a+ alist aand aor
 	   (aif :calls if :rule :first)
+	   (awhile :rule :first)
 	   (awhen :rule :first)
 	   (asetf :rule :place))
 (defmacro _f (op place &rest args)
+  "For defining setf macros."
   (multiple-value-bind (vars forms var set access)
       (get-setf-expansion place)
     `(let* (,@(mapcar #'list vars forms)
 	       (,(car var) (,op ,access ,@args)))
        ,set)))
 (defmacro pull (obj place &rest args)
+  "Delete obj from a stored list. Args are delete kwargs."
   (multiple-value-bind (vars forms var set access)
       (get-setf-expansion place)
     (let ((g (gensym)))
@@ -389,8 +417,8 @@
 	      ,@(mapcar #'list vars forms)
 	      (,(car var) (delete ,g ,access ,@args)))
 	 ,set))))
-
 (defmacro pull-if (test place &rest args)
+  "Pull on a predicate."
   (multiple-value-bind (vars forms var set access)
       (get-setf-expansion place)
     (let ((g (gensym)))
@@ -398,8 +426,8 @@
 	      ,@(mapcar #'list vars forms)
 	      (,(car var) (delete-if ,g ,access ,@args)))
 	 ,set))))
-
 (defmacro popn (n place)
+  "Repeated popping from a stored list."
   (multiple-value-bind (vars forms var set access)
       (get-setf-expansion place)
     (with-gensyms (gn glst)
@@ -410,6 +438,7 @@
 		     (prog1 (subseq ,glst 0 ,gn)
 		       ,set)))))
 (defmacro make-reader (name (stream-var dispatch-1 dispatch-2) &body body)
+  "Simplify the reader macro creation process in most cases."
   (with-gensyms (sub-char numarg)
     `(progn (defun ,name (,stream-var ,sub-char ,numarg)
 	(declare (ignore ,sub-char ,numarg))
@@ -458,9 +487,10 @@
 	#'identity)))
 
 (defmacro y (lambda-list-args specific-args &rest code)
-	 `(labels ((f ,lambda-list-args
-		     . ,code))
-	    (f ,@specific-args)))
+  "Exactly like Hoyte's nlet. Not tail-recursive unless the compiler does."
+  `(labels ((f ,lambda-list-args
+	      . ,code))
+     (f ,@specific-args)))
 #|Essentially:
 (y (a b) (10 0)
      (if (= 0 a) b (f (- a 1) (progn (print b) (+ b 1 )))))
@@ -473,9 +503,9 @@
  	   ((integerp tree) (funcall function tree))
  	   (t (cons (f (car tree))
  		    (f (cdr tree)))))))
-(defun whitespacep (char)
+(defun terminatingp (char)
   "Aux function."
-  (not (null (member char (list #\Newline #\Space #\Tab) :test #'char=))))
+  (and (member char (list #\Newline #\Space #\Tab #\) #\( #\#) :test #'char-equal) char))
 (defmacro dolines ((var stream) &body body)
   `(do ((,var #1=(read-line ,stream nil nil) #1#))
        ((null ,var))
@@ -498,15 +528,16 @@
           ,(let (,@(loop for n in names for g in gensyms collect `(,n ,g)))
              ,@body)))))
 (defun nthcar (n list)
+  "Opposite of nthcdr."
   (if (or (null list) (<= n 0)) nil
       (cons (car list) (nthcar (1- n) (cdr list)))))
 (defmacro y-trace (lambda-list-args specific-args &body code)
   "Short labels with some tracing. Same as y."
   (with-gensyms (count)
-    `(progn (let ((,count 0))
-	      (y ,lambda-list-args ,specific-args
-		 (format *trace-output*  "~v~(f ~{ ~S~})~%" (incf ,count) (list ,@lambda-list-args))
-		 (format *trace-output*  "~v~=> ~S~%" ,count  (progn ,@code)))))))
+    `(let ((,count 0))
+       (y ,lambda-list-args ,specific-args
+	  (format *trace-output*  "~v~(f ~{ ~S~})~%" (incf ,count) (list ,@lambda-list-args))
+	  (format *trace-output*  "~v~=> ~S~%" ,count  (progn ,@code))))))
 (defmacro abbrevs (&rest items)
   `(progn ,@(mapcar #'(lambda (p) (cons 'abbrev p)) (group items 2))))
 (defmacro abbrev (long short)
@@ -523,16 +554,6 @@
 	 define-setf-expander defexpand)
 (defun push-on (elt stack)
   (vector-push-extend elt stack) stack)
-(defun |#`-reader| (stream sub-char numarg)
-  (declare (ignore sub-char))
-  (unless numarg (setq numarg 1))
-  `(lambda ,(loop for i from 1 to numarg
-                  collect (symb 'a i))
-     ,(funcall
-        (get-macro-character #\`) stream nil)))
-
-(set-dispatch-macro-character
-  #\# #\` #'|#`-reader|)
 (defmacro prognil (&rest forms)
   "Tired for writing (progn terminal-crashing-return-val nil)?"
   `(progn ,@forms nil))
@@ -543,22 +564,22 @@
 ;;;    (sb-sprof:with-profiling () code)
 ;;;    (utils:basic-profile () code)
 ;;; Want to calculate fibbinacci really fast?
-(defun fib-fast (n) 
-  (if (<= n 2) 1
-      (y (m p1 p2) (3 1 1)
-	 (if (= n m) (+ p1 p2)
-	     (f (1+ m) (+ p1 p2) p1)))))
+;; (defun fib-fast (n) 
+;;   (if (<= n 2) 1
+;;       (y (m p1 p2) (3 1 1)
+;; 	 (if (= n m) (+ p1 p2)
+;; 	     (f (1+ m) (+ p1 p2) p1)))))
 ;;; Want to calculate fibbinacci really slow?
-(defun fib-slow (n)
-  (if (<= n 2) 1
-      (+ (fib-slow (1- n)) (fib-slow (- n 2)))))
+;; (defun fib-slow (n)
+;;   (if (<= n 2) 1
+;;       (+ (fib-slow (1- n)) (fib-slow (- n 2)))))
 ;;; Want to calculate fibbinacci at the same speed as the previous one but
 ;;; memoize each one? Added bonus of being able to write it more idiomatically.
 ;;; Takes only about twice as long as the other one, which makes sense since
 ;;; there are now two major operations (addition and hashing) per call.
-(defmemo fib-save (n) 
-  (if (>= 0 n) 1
-      (+ (fib-save (- n 1)) (fib-save (- n 2)))))
+;; (defmemo fib-save (n) 
+;;   (if (>= 0 n) 1
+;;       (+ (fib-save (- n 1)) (fib-save (- n 2)))))
 #|(prognil (time (fib     100000))); => .35 seconds
 
 (prognil (time (fibsave 100000))); => .7 seconds
