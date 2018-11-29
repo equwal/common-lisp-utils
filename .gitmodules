@@ -1,0 +1,3 @@
+[submodule "let-over-lambda"]
+	path = let-over-lambda
+	url = git@github.com:equwal/let-over-lambda.git
