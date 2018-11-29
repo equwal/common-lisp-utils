@@ -1,6 +1,6 @@
 ;;;; My utilities and toys.
 (defpackage :utils
-  (:use :cl :cl-user)
+  (:use :cl :cl-user :let-over-lambda)
   (:export :once-only
 	   :queue
 	   :pushq
