@@ -1,6 +1,7 @@
 ;;;; My utilities and toys.
 (defpackage :utils
   (:use :cl :cl-user :let-over-lambda)
+  (:shadow :mkstr :symb :self :dlambda :flatten :aif)
   (:export :once-only
 	   :queue
 	   :pushq
@@ -20,12 +21,11 @@
 	   :awhen
 	   :awhile
 	   :alist
-	   ;:aand
+	   :aand
 	   :aor
 	   :a+
 	   :asetf
-	   ;:it ;; for anaphoric macros
-	  ; :f ;; for y-combinator macro
+	   :f ;; for y-combinator macro
 	   :_f
 	   :abbrev
 	   :abbrevs
@@ -77,8 +77,6 @@
 	   :shuffle
 	   :interpol
 	   :compose
-	   :nlet
-	   :dlambda
 	   :in
 	   :inq
 	   :in-if
@@ -92,18 +90,6 @@
 	   :defanaph
 	   :make-reader))
 (in-package :utils)
-
-(defun group (source n)
-  (if (zerop n) (error "zero length"))
-  (labels ((rec (source acc)
-             (let ((rest (nthcdr n source)))
-               (if (consp rest)
-                   (rec rest (cons
-                               (subseq source 0 n)
-                               acc))
-                   (nreverse
-                     (cons source acc))))))
-    (if source (rec source nil) nil)))
 (defmacro with-gensyms (symbols &body body)
   "Create gensyms for those symbols."
   `(let (,@(mapcar #'(lambda (sym)
@@ -433,22 +419,27 @@
       (let ((sym (gensym)))
 	`(let* ((,sym ,(car args))
 		(it ,sym))
+	   (declare (ignorable it))
 	   ,(anaphex1 (cdr args)
 		      (append call (list sym)))))
     call))
 (defun anaphex2 (op args)
-  `(let ((it ,(car args))) (,op it ,@(cdr args))))
+  `(let ((it ,(car args)))
+     (declare (ignorable it))
+     (,op it ,@(cdr args))))
 (defun anaphex3 (op args)
-  `(_f (lambda (it) (,op it ,@(cdr args))) ,(car args)))
+  `(_f (lambda (it)
+	 (declare (ignorable it))
+	 (,op it ,@(cdr args))) ,(car args)))
 (defanaphs a+ alist aand aor
 	   (aif :calls if :rule :first)
 	   (awhile :rule :first)
 	   (awhen :rule :first)
 	   (asetf :rule :place))
-(defun after (x y lst &key (test #'eql))
+(defun after (x z lst &key (test #'eql))
   "Return the sublist where x is after y: (y x...)"
-  (let ((rest (before y x lst :test test)))
-    (aand rest (member x rest :test test) (cons y it))))
+  (let ((rest (before z x lst :test test)))
+    (aand rest (member x rest :test test) (cons z it))))
 (defmacro _f (op place &rest args)
   "For defining setf macros."
   (multiple-value-bind (vars forms var set access)
