@@ -1,0 +1,28 @@
+(defpackage :est
+  (:use :cl :utils :brain))
+(defun est (fn too-high? too-low? bigger smaller &optional (guess 1))
+  (let ((r (funcall fn guess)))
+    (cond ((funcall too-high? r) (est fn too-high? too-low? bigger smaller (funcall smaller guess)))
+	  ((funcall too-low? r) (est fn too-high? too-low? bigger smaller (funcall bigger guess)))
+	  (t guess))))
+(defun est-num (fn goal error &optional (guess 1))
+  (est fn
+       (lambda (g) (< (+ goal error) g))
+       (lambda (g) (> (- goal error) g))
+       (lambda (g) (* g (1+ (random 1.0))))
+       (lambda (g) (* g (random 1.0)))
+       guess))
+(defun final (str)
+  (aref str (1- (length str))))
+(defun zero (str)
+  (char str 0))
+(let ((bf ""))
+  (dostring (goalc "hello, world!")
+    (est (lambda (g) (when (char= goalc (zero (fuck #1=(concatenate 'string g ".")))) (setf bf (concatenate 'string bf #1#))))
+				       
+	 (lambda (g) (char> (zero (fuck (concatenate 'string g "."))) goalc))
+	 (lambda (g) (char< (zero (fuck (concatenate 'string g "."))) goalc))
+				       
+	 (lambda (g) (mkstr g "+"))
+	 (lambda (g) (mkstr g "-"))
+	 "+")))

@@ -1,23 +1,31 @@
 ;;;; My utilities and toys.
 (defpackage :utils
-  (:use :cl :cl-user :lol)
+  (:use :cl :cl-user)
   (:export :once-only
+	   :queue
+	   :pushq
+	   :popq
+	   :new
+	   :end
+	   :group
 	   :terminatingp
 	   :with-gensyms
 	   :y
+	   :mkstr
 	   :pop-off
+	   :dostring
 	   :make-stack
 	   :aif
 	   :use
 	   :awhen
 	   :awhile
 	   :alist
-	   :aand
+	   ;:aand
 	   :aor
 	   :a+
 	   :asetf
-	   :it ;; for anaphoric macros
-	   :f ;; for y-combinator macro
+	   ;:it ;; for anaphoric macros
+	  ; :f ;; for y-combinator macro
 	   :_f
 	   :abbrev
 	   :abbrevs
@@ -84,6 +92,18 @@
 	   :defanaph
 	   :make-reader))
 (in-package :utils)
+
+(defun group (source n)
+  (if (zerop n) (error "zero length"))
+  (labels ((rec (source acc)
+             (let ((rest (nthcdr n source)))
+               (if (consp rest)
+                   (rec rest (cons
+                               (subseq source 0 n)
+                               acc))
+                   (nreverse
+                     (cons source acc))))))
+    (if source (rec source nil) nil)))
 (defmacro with-gensyms (symbols &body body)
   "Create gensyms for those symbols."
   `(let (,@(mapcar #'(lambda (sym)
@@ -98,6 +118,34 @@
 ;;; Make CPS functions automagically
 ;;; Ex: (cps apply& apply (fn list)); => apply&
 ;;; Some might call this compile-time  intern uncool. Those people are lame.
+;; 
+(defparameter nilq (make-array 1 :fill-pointer 0 :adjustable t))
+(declaim (inline queue pushq popq new end))
+(defun pushq (a q)
+  (declare (vector q) (optimize (speed 3) (safety 0)))
+  (let ((q2 (if (eql nilq q)
+		(make-array 1 :fill-pointer 0 :adjustable t)
+		q)))
+    (vector-push-extend a q2)
+    (values q2 a)))
+(defun end (q)
+  (declare (vector q))
+  (aref q 0))
+(defun new (a q)
+  (declare (vector q) (optimize (speed 3) (safety 0)))
+  (concatenate 'vector q (make-array 1 :initial-contents `(,a))))
+(defun popq (q)
+  (declare (vector q))
+  (values (end q) (setf q (subseq q 1))))
+(defun queue (&rest things)
+  (labels ((inner (things)
+	     (declare (list things) (optimize (speed 3) (safety 0)))
+	     (if (null things)
+		 nilq
+		 (multiple-value-bind (a b)
+		     (pushq (car things) (inner (cdr things)))
+		   (declare (ignore b)) a))))
+    (inner things)))
 (defmacro make-stack (&rest array-options)
   "A very common use of arrays. push-on and pop-off"
   `(make-array 0 :adjustable t :fill-pointer 0 ,@array-options))
@@ -164,10 +212,6 @@
          (cond ((funcall test y first) nil)
                ((funcall test x first) lst)
                (t (before x y (cdr lst) :test test))))))
-(defun after (x y lst &key (test #'eql))
-  "Return the sublist where x is after y: (y x...)"
-  (let ((rest (before y x lst :test test)))
-    (aand rest (member x rest :test test) (cons y it))))
 (defun duplicate (obj lst &key (test #'eql))
   "See if an object is duplicated in a flat list."
   (member obj (cdr (member obj lst :test test)) 
@@ -401,6 +445,10 @@
 	   (awhile :rule :first)
 	   (awhen :rule :first)
 	   (asetf :rule :place))
+(defun after (x y lst &key (test #'eql))
+  "Return the sublist where x is after y: (y x...)"
+  (let ((rest (before y x lst :test test)))
+    (aand rest (member x rest :test test) (cons y it))))
 (defmacro _f (op place &rest args)
   "For defining setf macros."
   (multiple-value-bind (vars forms var set access)
@@ -527,6 +575,13 @@
        `(let (,,@(loop for g in gensyms for n in names collect ``(,,g ,,n)))
           ,(let (,@(loop for n in names for g in gensyms collect `(,n ,g)))
              ,@body)))))
+(defmacro dostring ((var string &optional result) &body body)
+  (once-only (string)
+    (with-gensyms (count)
+      `(do* ((,count 0 (1+ ,count)))
+	    ((= ,count (length ,string)) ,result)
+	 (let ((,var (elt ,string ,count)))
+	   ,@body)))))
 (defun nthcar (n list)
   "Opposite of nthcdr."
   (if (or (null list) (<= n 0)) nil
@@ -607,3 +662,7 @@
   `(declaim (inline ,name))
   `(defun ,name ,lambda-list
      ,@body))
+(defpackage :equwal
+  (:use :cl :cl-user :utils :uiop)
+  (:shadowing-import-from :utils)
+  (:nicknames :eq))
