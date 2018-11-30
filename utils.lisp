@@ -1,9 +1,12 @@
 ;;;; My utilities and toys.
 (defpackage :utils
   (:use :cl :cl-user :let-over-lambda)
-  (:shadow :mkstr :symb :self :dlambda :flatten :aif)
+  (:shadow :mkstr :symb :self :flatten :aif)
   (:export :once-only
+	   :mkstr :symb :self :flatten :aif
 	   :queue
+	   :collect
+	   :doarray
 	   :pushq
 	   :popq
 	   :new
@@ -86,6 +89,7 @@
 	   :allf
 	   :nilf
 	   :tf
+	   :it
 	   :toggle
 	   :defanaph
 	   :make-reader))
@@ -106,6 +110,12 @@
 ;;; Some might call this compile-time  intern uncool. Those people are lame.
 ;; 
 (defparameter nilq (make-array 1 :fill-pointer 0 :adjustable t))
+(defmacro collect ((var list) &body body)
+  "Scan a list, taking one element at a time in the var. Collect vars into a list."
+  (with-gensyms (lst)
+    `(let ((,lst ,list))
+       (mapcar #'(lambda (,var)
+		   ,@body) ,lst))))
 (declaim (inline queue pushq popq new end))
 (defun pushq (a q)
   (declare (vector q) (optimize (speed 3) (safety 0)))
@@ -566,6 +576,14 @@
        `(let (,,@(loop for g in gensyms for n in names collect ``(,,g ,,n)))
           ,(let (,@(loop for n in names for g in gensyms collect `(,n ,g)))
              ,@body)))))
+(defmacro doarray ((var array) &body body)
+  (with-gensyms (count arr)
+    `(block nil
+       (let ((,arr ,array))
+	 (do* ((,count 0 (1+ ,count))
+	       (,var (aref ,arr ,count) (aref ,arr ,count)))
+	      ((= ,count (1- (length ,arr))) (progn ,@body nil))
+	   (progn ,@body nil))))))
 (defmacro dostring ((var string &optional result) &body body)
   (once-only (string)
     (with-gensyms (count)
